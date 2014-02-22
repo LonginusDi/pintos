@@ -4,6 +4,12 @@
 #include <list.h>
 #include <stdbool.h>
 
+typedef volatile int mutex;
+void mutex_lock(mutex *lock);
+void mutex_unlock(mutex *lock);
+void mutex_init(mutex *lock);
+
+
 /* A counting semaphore. */
 struct semaphore 
   {
@@ -22,6 +28,9 @@ struct lock
   {
     struct thread *holder;      /* Thread holding lock (for debugging). */
     struct semaphore semaphore; /* Binary semaphore controlling access. */
+    struct list_elem elem;
+    int priority;
+    bool changed;
   };
 
 void lock_init (struct lock *);
