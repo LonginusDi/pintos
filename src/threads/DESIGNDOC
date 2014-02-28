@@ -99,7 +99,7 @@ If it is the last lock that occurs donation to be released, I will change it to 
 If the thread_set_priority() is interrutped from any interrupts, and inside the interrupts, it change the data structures of thread. For example, if we need to search the list to get the max priority, and interrupts also modify that data structure. It will corrupt the data.
 I cannot use a lock since the problem is caused by the interrupts, and the interrupt cannot be put in block list. Therefore, to protect this thing from happening, I need to disable the interrupts. 
 
-In my design, I do not need to modify another data structure except the current thread priority. I will not cause any race condition since I keep those values interrupts will never change those values. Therefore, I do not need any synchronizaion in principle. 
+In my design, I do not need to modify another data structure except the current thread priority. I will not cause any race condition since I keep those values interrupts will never change those values. Therefore, I do not need any synchronizaion in principle. In case the interrupt handler does change some threads' priority, which does not occur in those test cases, I do like to disable the interrupt handler to play safe. 
 
 
 ---- RATIONALE ----

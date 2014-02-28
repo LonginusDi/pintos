@@ -344,11 +344,15 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
+  enum intr_level old_level;
+  ASSERT (!intr_context ());
+  old_level = intr_disable ();
   struct thread * cur = thread_current ();
   if (cur->holding_lock == 0 || cur->priority < new_priority)
     cur->priority = new_priority;
   cur->org_priority = new_priority; 
   thread_yield();
+  intr_set_level (old_level);
 }
 
 /* Returns the current thread's priority. */
