@@ -8,9 +8,7 @@
 
 >> Fill in the names and email addresses of your group members.
 
-FirstName LastName <email@domain.example>
-FirstName LastName <email@domain.example>
-FirstName LastName <email@domain.example>
+Chengye Yin <chengyey@usc.edu>
 
 ---- PRELIMINARIES ----
 
@@ -29,27 +27,38 @@ FirstName LastName <email@domain.example>
 >> A1: Copy here the declaration of each new or changed `struct' or
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
+In timer.h, I define struct time. It has 3 fields, int endTime (when does the timer should be fired), semaphore sem (initialized with 0 to block the thread), struct list_elem elem (used for linked list purpose). 
+static struct list timer_queue; a list for existing timer.
+static struct semaphore global_sem; synchronize the adding timer in timer_sleep() and removing timer in timer interrupt handler. 
 
 ---- ALGORITHMS ----
 
 >> A2: Briefly describe what happens in a call to timer_sleep(),
 >> including the effects of the timer interrupt handler.
+Inside the timer_sleep(), I first acquire the semaphore. Then I add a timer struct into the list, and make the semaphore inside the struct down.
+Inside the interrupt handler, if I cannot acquire the semaphore, I don't check the list. If I can, I will check if any timer can be fired, and release that timer semaphore. 
 
 >> A3: What steps are taken to minimize the amount of time spent in
 >> the timer interrupt handler?
+The first implemenation is that I write my own single-linked list. It turns out that after I add the synchronizaition, it will delay the release of timer. 
+Then I use the built-in list function, it turns out the execution is much faster, and it is not likely that it will delay the timer being fired. 
+I also only protect the adding/deleting function of the list, so that only the minimum codes are synchronized. 
 
 ---- SYNCHRONIZATION ----
 
 >> A4: How are race conditions avoided when multiple threads call
 >> timer_sleep() simultaneously?
+I supply a global semaphore, and I need to acquire that semaphore to add into the list. 
 
 >> A5: How are race conditions avoided when a timer interrupt occurs
 >> during a call to timer_sleep()?
+I use semaphore try down, if it returns false, I just return. If it succeeds, I try to search the list find out what timer needs to be fired, and release the global semaphore. 
 
 ---- RATIONALE ----
 
 >> A6: Why did you choose this design?  In what ways is it superior to
 >> another design you considered?
+I choose this design because the it protects the critical region with minimum overheads. I also choose to use the built-in list instead of writing my own because its simplicity and efficiency. 
 
 			 PRIORITY SCHEDULING
 			 ===================
@@ -59,104 +68,43 @@ FirstName LastName <email@domain.example>
 >> B1: Copy here the declaration of each new or changed `struct' or
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
+Inside the process control block, I add two list: hold_locks(unique locks that the thread holds), wait_threads(what thread the current thread is waiting for). 
+Inside the lock, I add the field priority(the max priority of the current lock), and changed(a boolean represents whether the lock is donated), org_priority(the original priority of the thread). 
 
 >> B2: Explain the data structure used to track priority donation.
 >> Use ASCII art to diagram a nested donation.  (Alternately, submit a
 >> .png file.)
+First, thread_a got the lock_a, with priority 31. It does nothing to its control block. Then thread_b acquires lock_a, which causes thread_a add the lock_a into thread_a's hold_locks, it also adds itself into wait_threads. Then it acquires lock_b. So far, the priority of thread_a is 32. When thread_c acquires lock_b, it adds lock_b into thread_b's hold_locks, and add itself into wait_threads of thread_c. Then it changes the priority of thread_b is 33, and causes every thread inside thread_b's wait_threads changes its priority to 33 if it is less than 33. If the priority of wait_threads changes, then recursively change every parent thread inside wait_threads. 
+See .png
 
 ---- ALGORITHMS ----
 
 >> B3: How do you ensure that the highest priority thread waiting for
 >> a lock, semaphore, or condition variable wakes up first?
+When I need to get the next thread to run, I use list_max with a function pointer to compare those two threads' priority. Then I remove the thread from the list. 
 
 >> B4: Describe the sequence of events when a call to lock_acquire()
 >> causes a priority donation.  How is nested donation handled?
+If the lock never occurs in the lock->holder, I will add the lock into the lock->holder list. If the priority of the current thread is higher, I will change the current thread. Then I recursively search the threads causing the current thread being blocked, and if the priority is lower, I change to the current thread's priority. 
 
 >> B5: Describe the sequence of events when lock_release() is called
 >> on a lock that a higher-priority thread is waiting for.
+If it is the last lock that occurs donation to be released, I will change it to the original priority that stored in the process control block. If there are locks inside the donation list(hold_locks) after remove the current locks, I will set the priority to the max of donation list(hold_locks).
 
 ---- SYNCHRONIZATION ----
 
 >> B6: Describe a potential race in thread_set_priority() and explain
 >> how your implementation avoids it.  Can you use a lock to avoid
 >> this race?
+If the thread_set_priority() is interrutped from any interrupts, and inside the interrupts, it change the data structures of thread. For example, if we need to search the list to get the max priority, and interrupts also modify that data structure. It will corrupt the data.
+I cannot use a lock since the problem is caused by the interrupts, and the interrupt cannot be put in block list. Therefore, to protect this thing from happening, I need to disable the interrupts. 
+
+In my design, I do not need to modify another data structure except the current thread priority. I will not cause any race condition since I keep those values interrupts will never change those values. Therefore, I do not need any synchronizaion in principle. 
+
 
 ---- RATIONALE ----
 
 >> B7: Why did you choose this design?  In what ways is it superior to
 >> another design you considered?
+I choose this design because I do not need a lot of synchronization to make it work. I always try to book-keep everything such as is_donated(changed in struct lock), and the max priority(priority in struct lock). I also use recursion to keep track of every nested donation, and it makes the code a lot more easier. To make multiple locks work, I add a list of unique locks inside the process control block, so that when the lock is released, I can determine how to set back the priority. 
 
-			  ADVANCED SCHEDULER
-			  ==================
-
----- DATA STRUCTURES ----
-
->> C1: Copy here the declaration of each new or changed `struct' or
->> `struct' member, global or static variable, `typedef', or
->> enumeration.  Identify the purpose of each in 25 words or less.
-
----- ALGORITHMS ----
-
->> C2: Suppose threads A, B, and C have nice values 0, 1, and 2.  Each
->> has a recent_cpu value of 0.  Fill in the table below showing the
->> scheduling decision and the priority and recent_cpu values for each
->> thread after each given number of timer ticks:
-
-timer  recent_cpu    priority   thread
-ticks   A   B   C   A   B   C   to run
------  --  --  --  --  --  --   ------
- 0
- 4
- 8
-12
-16
-20
-24
-28
-32
-36
-
->> C3: Did any ambiguities in the scheduler specification make values
->> in the table uncertain?  If so, what rule did you use to resolve
->> them?  Does this match the behavior of your scheduler?
-
->> C4: How is the way you divided the cost of scheduling between code
->> inside and outside interrupt context likely to affect performance?
-
----- RATIONALE ----
-
->> C5: Briefly critique your design, pointing out advantages and
->> disadvantages in your design choices.  If you were to have extra
->> time to work on this part of the project, how might you choose to
->> refine or improve your design?
-
->> C6: The assignment explains arithmetic for fixed-point math in
->> detail, but it leaves it open to you to implement it.  Why did you
->> decide to implement it the way you did?  If you created an
->> abstraction layer for fixed-point math, that is, an abstract data
->> type and/or a set of functions or macros to manipulate fixed-point
->> numbers, why did you do so?  If not, why not?
-
-			   SURVEY QUESTIONS
-			   ================
-
-Answering these questions is optional, but it will help us improve the
-course in future quarters.  Feel free to tell us anything you
-want--these questions are just to spur your thoughts.  You may also
-choose to respond anonymously in the course evaluations at the end of
-the quarter.
-
->> In your opinion, was this assignment, or any one of the three problems
->> in it, too easy or too hard?  Did it take too long or too little time?
-
->> Did you find that working on a particular part of the assignment gave
->> you greater insight into some aspect of OS design?
-
->> Is there some particular fact or hint we should give students in
->> future quarters to help them solve the problems?  Conversely, did you
->> find any of our guidance to be misleading?
-
->> Do you have any suggestions for the TAs to more effectively assist
->> students, either for future quarters or the remaining projects?
-
->> Any other comments?
