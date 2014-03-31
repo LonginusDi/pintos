@@ -21,16 +21,16 @@ main (int argc, const char *argv[])
   int child_idx;
   int fd;
   size_t i;
-
   quiet = true;
   
   CHECK (argc == 2, "argc must be 2, actually %d", argc);
   child_idx = atoi (argv[1]);
-
+  //printf("here1:%d\n", child_idx);
   random_init (0);
   random_bytes (buf, sizeof buf);
 
   CHECK ((fd = open (file_name)) > 1, "open \"%s\"", file_name);
+  //printf("here:%d\n", child_idx);
   for (i = 0; i < sizeof buf; i++) 
     {
       char c;

@@ -8,7 +8,6 @@
 #include "userprog/pagedir.h"
 
 static void syscall_handler (struct intr_frame *);
-static struct lock lock;
 static int fd_num = 2;
 static struct file * get_file_from_fd(int fd); 
 void
@@ -65,6 +64,7 @@ syscall_handler (struct intr_frame *f UNUSED)
         else {
           printf("%s: exit(%d)\n", cur->name, *(int*)(f->esp + 4));
           cur->status_code = *(int*)(f->esp + 4);
+          //printf("exit tid: %d, %d\n", cur->tid, thread_current()->status_code);
           //printf("not failed\n");
         }
         thread_exit();
@@ -153,6 +153,7 @@ syscall_handler (struct intr_frame *f UNUSED)
     }
     break;
     case SYS_WAIT:
+      //printf("wait: %d\n", *(tid_t *)(f->esp + 4));
       f->eax = process_wait(*(tid_t *)(f->esp + 4));
       break;
     case SYS_HALT:

@@ -16,6 +16,7 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "userprog/syscall.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -193,20 +194,21 @@ struct space_location {
     if (!found)
       return -1;
     struct thread * child = get_thread_tid(child_tid);
-    int status = child->status_code;
-    /*while(child->status != THREAD_DYING)
-      thread_yield();*/
+    int status = -1;
+    while(child->status != THREAD_DYING)
+      thread_yield();
     if (child->status == THREAD_DYING) {
+      status = child->status_code;
       list_remove(&child->child_elem);
       list_remove(&child->allelem);
       palloc_free_page (child);
     }
-    else {
+    /*else {
       list_remove(&child->child_elem);
       list_remove(&child->allelem);
       list_remove(&child->elem);
       palloc_free_page (child);
-    }
+    }*/
     return status;
   }
 
@@ -219,17 +221,24 @@ struct space_location {
     struct list_elem * p = list_begin(&cur->file_list);
     struct file * t;
     //printf("list_size: %d\n", list_size(&cur->file_list));
+    if (lock_held_by_current_thread(&lock))
+      lock_release(&lock);
     while (p != list_end(&cur->file_list)) {
       t = list_entry(p, struct file, elem);
       struct list_elem * org_p = p;
       p = list_next(p);
       list_remove(org_p);
-      file_close(t);     
+      lock_acquire(&lock);
+      file_close(t);
+      lock_release(&lock);     
     }
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
-    if (cur->file)
+    if (cur->file) {
+      lock_acquire(&lock);
       file_close(cur->file);
+      lock_release(&lock);     
+    }
     pd = cur->pagedir;
     if (pd != NULL) 
     {
@@ -356,16 +365,21 @@ struct space_location {
     process_activate ();
 
   /* Open executable file. */
+    lock_acquire(&lock);
     file = filesys_open (file_name);
+    lock_release(&lock);
     if (file == NULL) 
     {
       printf ("load: %s: open failed\n", file_name);
       goto done; 
     }
     //printf("inode: %u\n", file->inode);
+    lock_acquire(&lock);
     file_deny_write(file);
+    lock_release(&lock);
     t->file = file;
   /* Read and verify executable header. */
+    lock_acquire(&lock);
     if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
       || memcmp (ehdr.e_ident, "\177ELF\1\1\1", 7)
       || ehdr.e_type != 2
@@ -375,20 +389,27 @@ struct space_location {
       || ehdr.e_phnum > 1024) 
     {
       printf ("load: %s: error loading executable\n", file_name);
+      lock_release(&lock);
       goto done; 
     }
-
+    lock_release(&lock);
   /* Read program headers. */
     file_ofs = ehdr.e_phoff;
     for (i = 0; i < ehdr.e_phnum; i++) 
     {
       struct Elf32_Phdr phdr;
-
-      if (file_ofs < 0 || file_ofs > file_length (file))
+      lock_acquire(&lock);
+      off_t temp = file_length (file);
+      lock_release(&lock);
+      if (file_ofs < 0 || file_ofs > temp)
         goto done;
+      lock_acquire(&lock);
       file_seek (file, file_ofs);
-
-      if (file_read (file, &phdr, sizeof phdr) != sizeof phdr)
+      lock_release(&lock);
+      lock_acquire(&lock);
+      temp = file_read (file, &phdr, sizeof phdr);
+      lock_release(&lock);
+      if (temp != sizeof phdr)
         goto done;
       file_ofs += sizeof phdr;
       switch (phdr.p_type) 
@@ -466,7 +487,10 @@ struct space_location {
       return false; 
 
   /* p_offset must point within FILE. */
-    if (phdr->p_offset > (Elf32_Off) file_length (file)) 
+    lock_acquire(&lock);
+    Elf32_Off temp = (Elf32_Off) file_length (file);
+    lock_release(&lock);
+    if (phdr->p_offset > temp) 
       return false;
 
   /* p_memsz must be at least as big as p_filesz. */
@@ -522,8 +546,9 @@ struct space_location {
     ASSERT ((read_bytes + zero_bytes) % PGSIZE == 0);
     ASSERT (pg_ofs (upage) == 0);
     ASSERT (ofs % PGSIZE == 0);
-
+    lock_acquire(&lock);
     file_seek (file, ofs);
+    lock_release(&lock);
     while (read_bytes > 0 || zero_bytes > 0) 
     {
       /* Calculate how to fill this page.
@@ -538,7 +563,10 @@ struct space_location {
           return false;
 
       /* Load this page. */
-        if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes)
+        lock_acquire(&lock);
+        off_t temp = file_read (file, kpage, page_read_bytes);
+        lock_release(&lock);
+        if (temp != (int) page_read_bytes)
         {
           palloc_free_page (kpage);
           return false; 

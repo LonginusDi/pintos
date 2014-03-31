@@ -4,4 +4,5 @@
 #include "filesys/filesys.h"
 #include "filesys/inode.h"
 void syscall_init (void);
+struct lock lock;
 #endif /* userprog/syscall.h */
