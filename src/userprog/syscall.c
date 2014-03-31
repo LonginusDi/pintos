@@ -28,7 +28,13 @@ syscall_handler (struct intr_frame *f UNUSED)
         int fd = *(int*)(f->esp + 4);
         char * buf = *(char**)(f->esp + 8);
         int size = *(int*)(f->esp + 12);
-        if (buf == NULL || size < 0)
+        if (!is_user_vaddr (buf)) {
+          f->eax = -1;
+          printf("%s: exit(%d)\n", thread_current()->name, -1);
+          thread_current()->status_code = -1;
+          thread_exit();
+        }
+        else if (buf == NULL || size < 0)
           f->eax = -1;       
         else if(fd == 1) {  
           putbuf(buf, size);
@@ -49,7 +55,16 @@ syscall_handler (struct intr_frame *f UNUSED)
       }
     	break;
     case SYS_EXEC:
-      f->eax = process_execute(*((char **)(f->esp + 4)));
+      {
+        char * arg = *((char **)(f->esp + 4));
+        if (!is_user_vaddr (arg)) {
+          f->eax = -1;
+          printf("%s: exit(%d)\n", thread_current()->name, -1);
+          thread_current()->status_code = -1;
+          thread_exit();
+        }
+        f->eax = process_execute(arg);
+      }
       break;
     case SYS_EXIT: {
       //if (thread_current()->tid == 166)
@@ -74,7 +89,13 @@ syscall_handler (struct intr_frame *f UNUSED)
       {
         char * name = *(char**)(f->esp + 4);
         off_t size = *(off_t*)(f->esp + 8);
-        if (name == NULL || size < 0) {
+        if (!is_user_vaddr (name)) {
+          f->eax = -1;
+          printf("%s: exit(%d)\n", thread_current()->name, -1);
+          thread_current()->status_code = -1;
+          thread_exit();
+        }
+        else if (name == NULL || size < 0) {
           printf("%s: exit(%d)\n", thread_current()->name, -1);
           thread_current()->status_code = -1;
           thread_exit();
@@ -89,6 +110,12 @@ syscall_handler (struct intr_frame *f UNUSED)
         char * file_name = *((char **)(f->esp + 4));
         struct file * file;
         //printf("file_name:%s\n", file_name);
+        if (!is_user_vaddr (file_name)) {
+          f->eax = -1;
+          printf("%s: exit(%d)\n", thread_current()->name, -1);
+          thread_current()->status_code = -1;
+          thread_exit();
+        }
         lock_acquire(&lock);
         if (file_name && (file = filesys_open(file_name)) ) {
           file->fd = ++fd_num;
@@ -174,8 +201,14 @@ syscall_handler (struct intr_frame *f UNUSED)
       break;
     case SYS_REMOVE: {
         char * file_name = *(char**)(f->esp + 4);
-        if (file_name == NULL)
-        f->eax = -1;
+        if (!is_user_vaddr (file_name)) {
+          f->eax = -1;
+          printf("%s: exit(%d)\n", thread_current()->name, -1);
+          thread_current()->status_code = -1;
+          thread_exit();
+        }
+        else if (file_name == NULL)
+          f->eax = -1;
         else {
           lock_acquire(&lock);
           filesys_remove(file_name);

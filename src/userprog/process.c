@@ -186,7 +186,7 @@ struct space_location {
     for (t = list_begin(&current->child_list); t != list_end(&current->child_list); t = list_next(t)) {
       struct thread * child = list_entry(t, struct thread, child_elem);
       if (child->tid == child_tid) {
-        sema_down(&current->sema);
+        sema_down(&child->sema);
         found = 1;
         break;
       }
@@ -254,9 +254,9 @@ struct space_location {
          pagedir_destroy (pd);
        }
        //cur->status = THREAD_DYING;
-       struct thread * parent = get_thread_tid(cur->parent_tid);
+       //struct thread * parent = get_thread_tid(cur->parent_tid);
        //printf("current pid: %d\n", cur->tid);
-       sema_up(&parent->sema);
+       sema_up(&thread_current()->sema);
      }
 
 /* Sets up the CPU for running user code in the current
