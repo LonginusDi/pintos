@@ -1,0 +1,150 @@
+		     +--------------------------+
+       	       	     |		CS 140		|
+		     | PROJECT 2: USER PROGRAMS	|
+		     | 	   DESIGN DOCUMENT     	|
+		     +--------------------------+
+
+---- GROUP ----
+
+>> Fill in the names and email addresses of your group members.
+
+Chengye Yin <chengyey@usc.edu>
+
+---- PRELIMINARIES ----
+
+>> If you have any preliminary comments on your submission, notes for the
+>> TAs, or extra credit, please give them here.
+
+>> Please cite any offline or online sources you consulted while
+>> preparing your submission, other than the Pintos documentation, course
+>> text, lecture notes, and course staff.
+
+			   ARGUMENT PASSING
+			   ================
+
+---- DATA STRUCTURES ----
+
+>> A1: Copy here the declaration of each new or changed `struct' or
+>> `struct' member, global or static variable, `typedef', or
+>> enumeration.  Identify the purpose of each in 25 words or less.
+struct space_location {
+  int start; -- the starting location of the argument
+  int end; -- the ending location of the argument
+  char * start_addr; -- the starting location in the stack
+  struct list_elem elem; -- use for linked list
+};
+
+---- ALGORITHMS ----
+
+>> A2: Briefly describe how you implemented argument parsing.  How do
+>> you arrange for the elements of argv[] to be in the right order?
+>> How do you avoid overflowing the stack page?
+I first use my own function get_arg_pos(const char *file_name, struct list * list) to construct a list of space-seperated words by recording its starting and ending location. Then I get the first argument as the file command to start the thread, so that the loader can load the correct executablt. Then I go through the list of free space and push those string at the top of the stack (PHY_SPACE - 1). Then I add the word alignmnet, and push those addresses of those arguments in the stack. Then I push the starting address of argv, argc, and a null return address. 
+To place argv[] in the right order, I push the last argument first, and also push the address of the argument first. 
+To avoid overflowing of the stack page, I will check the amount spaced used for the stack is less than the page size, which is 4K in this case. If it has too many arguments, I will just terminate the process with a loading failure. 
+
+---- RATIONALE ----
+
+>> A3: Why does Pintos implement strtok_r() but not strtok()?
+strtok_r() use a dynamic pointer to record the position of last argument. However strtok() uses a static pointer. Pintos implements strtok_r() because it can avoid race condition that two threads concurrently use the same function. Otherwise, the pointer will be overwritten. In summary, the strtok() is not reentrant since it uses a static pointer inside, and strtok_r() is more suitable in a multi-thread environment. 
+>> A4: In Pintos, the kernel separates commands into a executable name
+>> and arguments.  In Unix-like systems, the shell does this
+>> separation.  Identify at least two advantages of the Unix approach.
+The first advantage will be that it reduces the complexity of the kernel so that the kernel does not need to check for the unsafe command. The unsafe command will be filtered by the shell, and it will not be directed to the kernel. It will increase the efficiency of the kernel. 
+The second advantage is that it also allows more semantics such as input/output redirection, which is done by the shell in UNIX. However, in pintos, it will need many lines of code to support that feature. Also, UNIX shell supports the PATH variable, which adds the flexibility of where to find the executable. It is also consuming to search all the paths in the kernel, which should not occur. 
+
+
+			     SYSTEM CALLS
+			     ============
+
+---- DATA STRUCTURES ----
+
+>> B1: Copy here the declaration of each new or changed `struct' or
+>> `struct' member, global or static variable, `typedef', or
+>> enumeration.  Identify the purpose of each in 25 words or less.
+In struct file, 
+	add int fd; -- the file descriptor
+	struct list_elem elem; -- use for linked list in thread->file_list
+In struct thread, 
+	struct list child_list; -- the list of child process control block
+	tid_t parent_tid; -- the parent process tid
+	struct list_elem child_elem; -- use for linked list of child_list;
+	struct semaphore sema; -- use for wait child process
+	struct list file_list; -- store a list of open files
+	int status_code; -- the process exit code
+	struct file * file; -- the file struct of executable
+	bool last_child_failed; -- if the last child fail to load, true.
+
+>> B2: Describe how file descriptors are associated with open files.
+>> Are file descriptors unique within the entire OS or just within a
+>> single process?
+I put the file descriptor inside the file struct, and they are unique within the entire OS. I create a static variable inside syscall.c (fd_num), initiallzed with 2, avoiding the fd of stdin/stdout/stderror. Everytime I open a file, I increase the fd_num by 1. 
+
+---- ALGORITHMS ----
+
+>> B3: Describe your code for reading and writing user data from the
+>> kernel.
+In the read and write, I first check the file descriptor is valid given that it can be found in the list of open files. In the case of read, it the fd is 0, use input_getc(). If it is write and fd is 1, use put_buf(). 
+Then I will check the pointer passed in is a valid user address, if it exists in the kernel space, I will terminate the user process. Otherwise, it will occur as a page fault in the user context, and then I will just terminate the user process. 
+Then I will call the file interface related to that call, and also use a lock to synchronize the system call. If it has a return value, I will pass it to the eax register. 
+>> B4: Suppose a system call causes a full page (4,096 bytes) of data
+>> to be copied from user space into the kernel.  What is the least
+>> and the greatest possible number of inspections of the page table
+>> (e.g. calls to pagedir_get_page()) that might result?  What about
+>> for a system call that only copies 2 bytes of data?  Is there room
+>> for improvement in these numbers, and how much?
+If a system call request a full page to be copied, the minimum number of inspections is 1 if the whole data resides in a single page. Otherwise, I need to check for 2 pages, which is the max possible number of inspections. 
+If I only copy two bytes using the approach above, it also might use a max number of 2 inspections since the 2 bytes might span over 2 pages. Those numbers are unchanged. 
+In my approach, I will just let the system read or write until it fails to find a mapping of physical address, which causes a page fault. Then I terminate the user process with a status of -1. In this case, I will not need to check address in the user context. Since the process will not cause problems within kernel context, it is efficient not to search the mapping at first. It is also stable because it will always cause a page fault in this situation. Since the user is doing illegal things anyhow, it is justifiable to terminate the process. 
+
+>> B5: Briefly describe your implementation of the "wait" system call
+>> and how it interacts with process termination.
+Whenever a process will be created, I will add the process being created to the child_list of the current thread. 
+Then in the process_wait(pid), I first find the pid in the child list, and get the child process control block. If I cannot find one, I just return -1.
+Then I will use sema_down(child->sema) to block the process if the child does not exit.
+Inside the process_exit(), I release the semaphore inside the current thread (current->sema). The most important thing is that I do not remove it from any list, and do not free this control block. 
+Then inside the process_wait(), after the sema_down(), I gather the child process status, remove it from all linkded list, and free the control block. 
+Finally, return the child status to the user process. 
+
+>> B6: Any access to user program memory at a user-specified address
+>> can fail due to a bad pointer value.  Such accesses must cause the
+>> process to be terminated.  System calls are fraught with such
+>> accesses, e.g. a "write" system call requires reading the system
+>> call number from the user stack, then each of the call's three
+>> arguments, then an arbitrary amount of user memory, and any of
+>> these can fail at any point.  This poses a design and
+>> error-handling problem: how do you best avoid obscuring the primary
+>> function of code in a morass of error-handling?  Furthermore, when
+>> an error is detected, how do you ensure that all temporarily
+>> allocated resources (locks, buffers, etc.) are freed?  In a few
+>> paragraphs, describe the strategy or strategies you adopted for
+>> managing these issues.  Give an example.
+To ensure the system call will never cause a panic inside the kernel, I first check whether the address passed in is a valid user address (<PHY_BASE). Otherwise, the kernel will panic due to page fault in kernel context. Then I will not check the address has a physical address mapping since it is too time-consuming. If the page fault does occur in the user context, I will terminate the process and free all the resources (thread_exit()). 
+To ensure the clean-up will go through successfully, I put all the clean-up code in process_exit(), which is called by thread_exit() (every thread exits will have to call this function). I first release all the locks that the current process hold, and then close all the open files. Also, I will set the exit status code to -1, and clean up the user memory(clear the page directory). Then I will release the semaphore in case this process is waited by another thread, and the parent thread will gather information and free the process control block. 
+---- SYNCHRONIZATION ----
+
+>> B7: The "exec" system call returns -1 if loading the new executable
+>> fails, so it cannot return before the new executable has completed
+>> loading.  How does your code ensure this?  How is the load
+>> success/failure status passed back to the thread that calls "exec"?
+Since the scheduler is preemptive, the process of creating a new thread will always occur that the thread being created will run immediately after we set up the thread structure, by calling thread_unblock(). If the load fail, it will set a flag (last_child_failed) inside the parent process control block since it is not running, and exit the current thread. By the time the parent thread has a chance to run, it the flag (last_child_failed) is true, I will return -1 as pid and clean up the child process. This process can be ensured by the nature of process scheduling, such that a child process created will always run first before the thread_create() ends. 
+>> B8: Consider parent process P with child process C.  How do you
+>> ensure proper synchronization and avoid race conditions when P
+>> calls wait(C) before C exits?  After C exits?  How do you ensure
+>> that all resources are freed in each case?  How about when P
+>> terminates without waiting, before C exits?  After C exits?  Are
+>> there any special cases?
+Those cases can be ensured by using a semaphore inside the child process. If P calls before C exits, the P will be blocked until C exits and then return the status of child. If C exits before P exits, there will not be any block of P, and it will return the status of child. If P terminates before C exits, I will set parent_tid in every child in child_list to -1, so that the child can do their clean up of process control block. If C terminates before P, there are nothing special since a semaphore can handle this case correctly. It is important that a child does not free its control block unless the parent exits first. 
+---- RATIONALE ----
+
+>> B9: Why did you choose to implement access to user memory from the
+>> kernel in the way that you did?
+I choose my design to only check the address in below PHY_BASE and let the user process causes page faults. Since compare the address<PHY_BASE is quite efficient and lookup the page directory is time-consuming. It is a waste of kernel time to validate the user space address. I a problem occurs, the termination of a process is legal and efficient. If I does not check the address<PHY_BASE, it will actually cause a page fault inside the kernel, which will cause a kernel panic. It is not good to shutdown the machine if a user process fails. 
+>> B10: What advantages or disadvantages can you see to your design
+>> for file descriptors?
+The advantages of my design of file descriptor is that when I assign the file descriptor, I do not need to check the list to ensure I get a unique file descriptor. The another advantage is that I do not need another data structure to map the file descriptor to a file struct, since the fd is inside the file struct. 
+The disadvantages of my design is that the file descriptor will overflow if I open too many files inside the entire OS, since the file descriptor is unique inside the entire OS. Another advantage is that I actually need to search the entire list of open files to get the actual file struct, which is not efficient. 
+Basically, the assignemnt of fd is O(1), and the search of fd is O(n). 
+>> B11: The default tid_t to pid_t mapping is the identity mapping.
+>> If you changed it, what advantages are there to your approach?
+I does not change the mapping of tid and pid. 
