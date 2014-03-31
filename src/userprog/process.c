@@ -380,7 +380,9 @@ struct space_location {
     t->file = file;
   /* Read and verify executable header. */
     lock_acquire(&lock);
-    if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
+    off_t temp = file_read (file, &ehdr, sizeof ehdr);
+    lock_release(&lock);
+    if (temp != sizeof ehdr
       || memcmp (ehdr.e_ident, "\177ELF\1\1\1", 7)
       || ehdr.e_type != 2
       || ehdr.e_machine != 3
@@ -389,17 +391,15 @@ struct space_location {
       || ehdr.e_phnum > 1024) 
     {
       printf ("load: %s: error loading executable\n", file_name);
-      lock_release(&lock);
       goto done; 
     }
-    lock_release(&lock);
   /* Read program headers. */
     file_ofs = ehdr.e_phoff;
     for (i = 0; i < ehdr.e_phnum; i++) 
     {
       struct Elf32_Phdr phdr;
       lock_acquire(&lock);
-      off_t temp = file_length (file);
+      temp = file_length (file);
       lock_release(&lock);
       if (file_ofs < 0 || file_ofs > temp)
         goto done;
