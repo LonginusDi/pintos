@@ -151,11 +151,17 @@ page_fault (struct intr_frame *f)
   /* To implement virtual memory, delete the rest of the function
      body, and replace it with code that brings in the page to
      which fault_addr refers. */
-  printf ("Page fault at %p: %s error %s page in %s context.\n",
+  /*printf ("Page fault at %p: %s error %s page in %s context.\n",
           fault_addr,
           not_present ? "not present" : "rights violation",
           write ? "writing" : "reading",
-          user ? "user" : "kernel");
-  kill (f);
+          user ? "user" : "kernel");*/
+  //kill (f);
+  //printf("exception tid: %d\n", thread_current()->tid);
+  //if (thread_current()->tid == 166)
+    //printf("here");
+  printf("%s: exit(%d)\n", thread_current()->name, -1);
+  thread_current()->status_code = -1;
+  thread_exit();
 }
 

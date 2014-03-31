@@ -4,7 +4,8 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
-
+#include "synch.h"
+#include "filesys/file.h"
 /* States in a thread's life cycle. */
 enum thread_status
   {
@@ -93,7 +94,14 @@ struct thread
     struct list wait_threads;
     bool holding_lock;
     struct list_elem allelem;           /* List element for all threads list. */
-
+    struct list child_list;
+    tid_t parent_tid;
+    struct list_elem child_elem;
+    struct semaphore sema;
+    struct list file_list;
+    int status_code;
+    struct file * file;
+    bool last_child_failed;
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 
@@ -146,5 +154,6 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
+struct thread * get_thread_tid(tid_t tid);
 
 #endif /* threads/thread.h */
