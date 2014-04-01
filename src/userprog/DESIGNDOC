@@ -18,7 +18,7 @@ Chengye Yin <chengyey@usc.edu>
 >> Please cite any offline or online sources you consulted while
 >> preparing your submission, other than the Pintos documentation, course
 >> text, lecture notes, and course staff.
-
+Multi-OOM works but it runs extremely slow, please be patient. 
 			   ARGUMENT PASSING
 			   ================
 
@@ -31,7 +31,7 @@ struct space_location {
   int start; -- the starting location of the argument
   int end; -- the ending location of the argument
   char * start_addr; -- the starting location in the stack
-  struct list_elem elem; -- use for linked list
+  struct list_elem elem; -- use for linked list to store the arg positions
 };
 
 ---- ALGORITHMS ----
@@ -40,7 +40,7 @@ struct space_location {
 >> you arrange for the elements of argv[] to be in the right order?
 >> How do you avoid overflowing the stack page?
 I first use my own function get_arg_pos(const char *file_name, struct list * list) to construct a list of space-seperated words by recording its starting and ending location. Then I get the first argument as the file command to start the thread, so that the loader can load the correct executablt. Then I go through the list of free space and push those string at the top of the stack (PHY_SPACE - 1). Then I add the word alignmnet, and push those addresses of those arguments in the stack. Then I push the starting address of argv, argc, and a null return address. 
-To place argv[] in the right order, I push the last argument first, and also push the address of the argument first. 
+To place argv[] in the right order, I push the last argument first, and also push the address of the last argument first. 
 To avoid overflowing of the stack page, I will check the amount spaced used for the stack is less than the page size, which is 4K in this case. If it has too many arguments, I will just terminate the process with a loading failure. 
 
 ---- RATIONALE ----
