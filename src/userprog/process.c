@@ -239,6 +239,10 @@ struct space_location {
       file_close(cur->file);
       lock_release(&lock);     
     }
+    for (p = list_begin(&cur->child_list); p != list_end(&cur->child_list); p = list_next(p)) {
+      struct thread * t = list_entry(p, struct thread, child_elem);
+      t->parent_tid = -1;
+    }
     pd = cur->pagedir;
     if (pd != NULL) 
     {
