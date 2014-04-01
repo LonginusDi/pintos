@@ -144,6 +144,15 @@ struct space_location {
     *((int *)if_.esp) = (int)list_size(&list);
     if_.esp -= 4;
     *((int *)if_.esp) = 0;
+    if (PHYS_BASE - if_.esp > PGSIZE) {
+      free_arg_pos(&list);
+      palloc_free_page(fn_copy);
+      tid_t parent_tid = thread_current()->parent_tid;
+      struct thread * parent = get_thread_tid(parent_tid);
+      if (parent) 
+        parent->last_child_failed = 1;
+      thread_exit();
+    }
     /*printf("argc: %d\n", *((int *)if_.esp));
     printf("argv: %u\n", *((int *)argv_addr));
     argv_addr = if_.esp + 4;
