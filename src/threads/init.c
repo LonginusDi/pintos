@@ -114,11 +114,15 @@ main (void)
   exception_init ();
   syscall_init ();
 #endif
-
+#ifdef VM
+  vm_frame_init();
+#endif
   /* Start thread scheduler and enable interrupts. */
   thread_start ();
   serial_init_queue ();
   timer_calibrate ();
+
+
 
 #ifdef FILESYS
   /* Initialize file system. */
@@ -128,7 +132,7 @@ main (void)
 #endif
 
   printf ("Boot complete.\n");
-  
+  swap_init();
   /* Run actions specified on kernel command line. */
   run_actions (argv);
 

@@ -4,13 +4,21 @@
 #include "userprog/gdt.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+#include "threads/vaddr.h"
+#include "userprog/pagedir.h"
+#ifdef VM
+#include "vm/page.h"
+#include "vm/frame.h"
 
+#endif
 /* Number of page faults processed. */
 static long long page_fault_cnt;
 
 static void kill (struct intr_frame *);
 static void page_fault (struct intr_frame *);
+static bool load_file(struct vm_page *, void* );
 
+extern struct lock fs_lock;
 /* Registers handlers for interrupts that can be caused by user
    programs.
 
@@ -147,21 +155,105 @@ page_fault (struct intr_frame *f)
   not_present = (f->error_code & PF_P) == 0;
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
-
+  
+  if (fault_addr >= PHYS_BASE) {
+    kill(f);
+  }
+  //printf("esp: %p, fault_addr: %p\n", f->esp, fault_addr);
+  if (fault_addr - f->esp <= 4 && fault_addr - f->esp >= 0) {
+    vm_install_page_stack((void*)((uint32_t)fault_addr & ~PGMASK));
+  }
   /* To implement virtual memory, delete the rest of the function
      body, and replace it with code that brings in the page to
      which fault_addr refers. */
-  /*printf ("Page fault at %p: %s error %s page in %s context.\n",
+#ifdef VM
+  if (fault_addr == 0) {
+    kill(f);
+    return;
+  }
+  if (not_present) {
+    fault_addr = (void*)((uint32_t)fault_addr & ~PGMASK) ;
+    struct thread * cur = thread_current();
+    struct vm_page *page = get_vm_page(fault_addr, thread_current());
+    if (page == NULL) {
+      printf("here1: %p\n", fault_addr);
+      kill(f);
+      return;
+    }
+    void *frame = vm_get_frame(PAL_USER, fault_addr);
+    if (!frame) {
+      printf("here2\n");
+      kill(f);
+      return;
+    }
+    if (!pagedir_set_page(cur->pagedir, fault_addr, frame, page->writable)) {
+      printf("here3\n");
+      kill(f);
+      return;
+    }
+    if (page->type == VM_FILE) {
+     // printf("file\n");
+      if (!load_file(page, frame)) {
+        printf("here4\n");
+        kill(f);
+        return;
+      }
+    }
+
+    if (page->type == VM_SWAP) {
+     // printf("swap\n");
+      swap_read(page->page_in_swap, fault_addr);
+      swap_remove(page->page_in_swap);
+    }
+
+    if (page->type == VM_STACK) {
+
+    }
+    vm_frame_set_done(frame);
+    pagedir_set_dirty(cur->pagedir, fault_addr, false);
+    return;
+  }
+  else {
+    void *esp=f->esp;
+    void *frame;
+    bool success;
+
+    if (esp - 4 == fault_addr || esp - 32 == fault_addr || !user) {
+      frame = vm_get_frame(PAL_USER, esp);
+      if (!frame) {
+        printf("here5\n");
+        kill(f);
+        return;
+      }
+      if (!pagedir_set_page(thread_current()->pagedir, esp, frame, true)) {
+        printf("here6\n");
+        kill(f);
+        return;
+      }
+      return;
+    }
+    kill(f);
+  }
+#else
+  printf ("Page fault at %p: %s error %s page in %s context.\n",
           fault_addr,
           not_present ? "not present" : "rights violation",
           write ? "writing" : "reading",
-          user ? "user" : "kernel");*/
-  //kill (f);
-  //printf("exception tid: %d\n", thread_current()->tid);
-  //if (thread_current()->tid == 166)
-    //printf("here");
-  printf("%s: exit(%d)\n", thread_current()->name, -1);
-  thread_current()->status_code = -1;
-  thread_exit();
+          user ? "user" : "kernel");
+  kill (f);
+#endif
+ 
+}
+
+
+bool load_file(struct vm_page *page, void* frame) {
+  lock_acquire(&fs_lock);
+  if(file_read_at(page->file, frame, page->read_bytes, page->offset) != page->read_bytes) {
+    return false;
+  }
+  //printf("read: %d, zero: %d\n", page->read_bytes, page->zero_bytes);
+  memset(frame + page->read_bytes, 0, page->zero_bytes);
+  lock_release(&fs_lock);
+  return true;
 }
 
