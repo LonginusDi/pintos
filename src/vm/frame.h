@@ -6,16 +6,16 @@
 struct frame {
 	void *paddr;
 	struct list_elem elem;
-	struct thread * thread;
-	void *uaddr;
-	bool done;
+	volatile struct thread * thread;
+	volatile void *uaddr;
+	volatile bool done;
 };
 
 struct list frame_list;
 
 void vm_frame_init(void);
 void *vm_get_frame(enum palloc_flags flags, void * uaddr);
-void vm_free_frame(void *);
+void vm_free_frame(struct thread *);
 void vm_frame_set_done(void *);
 void vm_clear_reference(void);
 #endif

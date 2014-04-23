@@ -23,6 +23,6 @@ struct vm_page {
 bool vm_install_page_fs(void *uaddr, struct file *f, off_t offset,
                         uint32_t read_bytes, uint32_t zero_bytes,
                         bool writable);
-void vm_uninstall_page(void *uaddr);
+void vm_uninstall_page(struct thread *);
 struct vm_page * get_vm_page(void *fault_addr, struct thread * t);
 #endif

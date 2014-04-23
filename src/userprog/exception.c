@@ -155,7 +155,6 @@ page_fault (struct intr_frame *f)
   not_present = (f->error_code & PF_P) == 0;
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
-  
   if (fault_addr >= PHYS_BASE) {
     kill(f);
   }
@@ -192,7 +191,7 @@ page_fault (struct intr_frame *f)
       return;
     }
     if (page->type == VM_FILE) {
-     // printf("file\n");
+      //printf("file: %d\n", cur->tid);
       if (!load_file(page, frame)) {
         printf("here4\n");
         kill(f);
@@ -201,7 +200,7 @@ page_fault (struct intr_frame *f)
     }
 
     if (page->type == VM_SWAP) {
-     // printf("swap\n");
+      //printf("swap: %d\n", thread_current()->tid);
       swap_read(page->page_in_swap, fault_addr);
       swap_remove(page->page_in_swap);
     }
@@ -214,24 +213,6 @@ page_fault (struct intr_frame *f)
     return;
   }
   else {
-    void *esp=f->esp;
-    void *frame;
-    bool success;
-
-    if (esp - 4 == fault_addr || esp - 32 == fault_addr || !user) {
-      frame = vm_get_frame(PAL_USER, esp);
-      if (!frame) {
-        printf("here5\n");
-        kill(f);
-        return;
-      }
-      if (!pagedir_set_page(thread_current()->pagedir, esp, frame, true)) {
-        printf("here6\n");
-        kill(f);
-        return;
-      }
-      return;
-    }
     kill(f);
   }
 #else

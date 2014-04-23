@@ -169,10 +169,11 @@ process_exit (void)
   }
 
   close_all_files (cur);
+  //printf("exit tid: %d\n", cur->tid);
   printf ("%s: exit(%d)\n", thread_name (), cur->exit_status);
   if ( cur->executable)
     file_close (cur->executable);
-
+  vm_free_frame(cur);
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */

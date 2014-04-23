@@ -35,16 +35,13 @@ bool vm_install_page_stack(void *uaddr) {
   return true;
 }
 
-void vm_uninstall_page(void *uaddr) {
+void vm_uninstall_page(struct thread * cur) {
   struct list_elem *p;
-  struct thread *cur = thread_current();
-  for (p = list_begin(&cur->supp_page_dir); p != list_end(&cur->supp_page_dir); p = list_next(p)) {
+  p = list_begin(&cur->supp_page_dir);
+  while (p != list_end(&cur->supp_page_dir)) {
     struct vm_page *t = list_entry(p, struct vm_page, elem);
-    if (t->uaddr == uaddr) {
-      list_remove(p);
-      free(t);
-      break;
-    }
+    p = list_next(p);
+    free(t);
   }
 }
 

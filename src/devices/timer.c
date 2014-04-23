@@ -7,9 +7,6 @@
 #include "threads/interrupt.h"
 #include "threads/synch.h"
 #include "threads/thread.h"
-#ifdef VM
-#include "vm/frame.h"
-#endif
   
 /* See [8254] for hardware details of the 8254 timer chip. */
 
@@ -175,9 +172,6 @@ timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
   thread_tick ();
-#ifdef VM
-  vm_clear_reference();
-#endif
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer

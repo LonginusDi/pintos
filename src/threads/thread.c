@@ -18,6 +18,7 @@
 #endif
 #ifdef VM
 #include "vm/frame.h"
+#include "vm/page.h"
 #endif
 
 /* Random value for struct thread's `magic' member.
@@ -115,6 +116,7 @@ thread_start (void)
   struct semaphore idle_started;
   sema_init (&idle_started, 0);
   thread_create ("idle", PRI_MIN, idle, &idle_started);
+  thread_create ("clock_algorithm", PRI_MIN, clock_algorithm, NULL);
   /* Start preemptive thread scheduling. */
   intr_enable ();
 
@@ -306,6 +308,9 @@ thread_exit (void)
   intr_disable ();
   list_remove (&cur->allelem);
   cur->status = THREAD_DYING;
+#ifdef VM
+
+#endif
   schedule ();
   NOT_REACHED ();
 }
@@ -428,6 +433,14 @@ idle (void *idle_started_ UNUSED)
     }
 }
 
+static void
+clock_algorithm(void *aux UNUSED) {
+  for (;;) {
+    vm_clear_reference();
+    timer_msleep(1);
+  }
+}
+
 /* Function used as the basis for a kernel thread. */
 static void
 kernel_thread (thread_func *function, void *aux) 
@@ -480,6 +493,7 @@ init_thread (struct thread *t, const char *name, int priority)
   list_init (&t->children);
   sema_init (&t->parent_sem, 0);
   sema_init (&t->child_sem, 0);
+  list_init (&t->supp_page_dir);
   t->magic = THREAD_MAGIC;
 
   if ( t != initial_thread ) {
@@ -561,7 +575,7 @@ thread_schedule_tail (struct thread *prev)
   if (prev != NULL && prev->status == THREAD_DYING && prev != initial_thread) 
     {
       ASSERT (prev != cur);
-      //palloc_free_page (prev);
+      palloc_free_page (prev);
     }
 }
 
