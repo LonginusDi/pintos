@@ -72,20 +72,20 @@ void vm_clear_reference() {
 }
 
 static void * vm_evict_frame(void* nuaddr) {
-	struct frame * evicted;
-	struct thread * thread;
-	void * uaddr, * paddr;
-	temp++;
+	volatile struct frame * evicted;
+	volatile struct thread * thread;
+	volatile void * uaddr, * paddr;
+	lock_acquire(&lock);
 	//printf("temp: %d\n", temp);
 	evicted = pick_evicted_frame();
 	thread = evicted->thread;
 	uaddr = evicted->uaddr;
 	paddr = evicted->paddr;
 	evicted->done = false;
-	if (evicted->thread != NULL) {
+	if (thread != NULL) {
 		bool dirty = pagedir_is_dirty(thread->pagedir, uaddr);
 		//printf("check: %d\n", temp);
-		struct vm_page * page = get_vm_page(uaddr, evicted->thread);
+		struct vm_page * page = get_vm_page(uaddr, thread);
 		if (page->type == VM_FILE && dirty) {
 			page->type = VM_SWAP;
 			page->page_in_swap = swap_write(paddr);
@@ -104,16 +104,15 @@ static void * vm_evict_frame(void* nuaddr) {
 	evicted->uaddr = nuaddr;
 	evicted->thread = thread_current();
 	evicted->done = false;
-	lock_acquire(&lock);
-	list_push_back(&frame_list, &evicted->elem);
-	lock_release(&lock);	
+	list_push_back(&frame_list, &evicted->elem);	
 	if (evicted->paddr == NULL)
 		printf("NULL");
+	lock_release(&lock);
 	return evicted->paddr;
 }
 
 static struct frame* pick_evicted_frame() {
-	lock_acquire(&lock);
+	
 	struct list_elem * elem;
 	struct frame * t = NULL;
 	for (elem = list_begin(&frame_list); elem != list_end(&frame_list); elem = list_next(elem)) {
@@ -130,8 +129,23 @@ static struct frame* pick_evicted_frame() {
 			}
 		}
 	}
-	list_remove(&t->elem);
-	lock_release(&lock);	
+	if (t == NULL) {
+		for (elem = list_begin(&frame_list); elem != list_end(&frame_list); elem = list_next(elem)) {
+			struct frame * f = list_entry(elem, struct frame, elem);
+			struct thread * thr = f->thread;
+			if (thr == NULL) {
+				t = f;
+				break;
+			}
+			else {
+				if (f->done) {
+					t = f;
+					break;
+				}
+			}
+		}
+	}
+	list_remove(&t->elem);	
 	return t;
 }
 
