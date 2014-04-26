@@ -31,7 +31,7 @@ void swap_read(int page, void * uaddr) {
 
 int swap_write(void * uaddr) {
 	lock_acquire(&lock);
-	int page = 0, i, j;
+	int page = -1, i, j;
 	//printf("write\n");
 	for (i = 0; i < swap_mapping_size; i++) {
 		bool found = false;
@@ -46,6 +46,8 @@ int swap_write(void * uaddr) {
 		if (found)
 			break;
 	}
+	if (page == -1)
+		PANIC("Not enough space");
 	for (i = 0; i < SECTOR_PER_PAGE; i++) {
 		//printf("page: %d\n", page);
 		//printf("before block write: %d, %p\n", i, uaddr + i * BLOCK_SECTOR_SIZE);

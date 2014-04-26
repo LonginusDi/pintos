@@ -24,6 +24,9 @@ static int64_t ticks;
    Initialized by timer_calibrate(). */
 static unsigned loops_per_tick;
 
+static struct list timer_queue;
+static struct semaphore global_sem;
+
 static intr_handler_func timer_interrupt;
 static bool too_many_loops (unsigned loops);
 static void busy_wait (int64_t loops);
@@ -37,6 +40,8 @@ timer_init (void)
 {
   pit_configure_channel (0, 2, TIMER_FREQ);
   intr_register_ext (0x20, timer_interrupt, "8254 Timer");
+  sema_init(&global_sem, 1);
+  list_init(&timer_queue);
 }
 
 /* Calibrates loops_per_tick, used to implement brief delays. */
@@ -90,10 +95,16 @@ void
 timer_sleep (int64_t ticks) 
 {
   int64_t start = timer_ticks ();
-
+  struct timer * timer;
+  timer = (struct timer *) malloc(sizeof(struct timer));
+  memset(timer, 0, sizeof(struct timer));
+  timer->endTime = ticks + start;
+  sema_init(&timer->sem, 0);
+  sema_down(&global_sem);
+  list_push_back(&timer_queue, &timer->elem);
+  sema_up(&global_sem);
   ASSERT (intr_get_level () == INTR_ON);
-  while (timer_elapsed (start) < ticks) 
-    thread_yield ();
+  sema_down(&timer->sem);
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
@@ -172,6 +183,17 @@ timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
   thread_tick ();
+  if (!sema_try_down(&global_sem))
+    return;
+  struct list_elem * p;
+  for (p = list_begin(&timer_queue); p != list_end(&timer_queue); p = list_next(p)) {
+    struct timer * timer = list_entry(p, struct timer, elem);
+    if (timer->endTime <= ticks) {
+      list_remove(p);
+      sema_up(&timer->sem);
+    }
+  }
+  sema_up(&global_sem);
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer

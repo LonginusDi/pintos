@@ -437,7 +437,7 @@ static void
 clock_algorithm(void *aux UNUSED) {
   for (;;) {
     vm_clear_reference();
-    timer_msleep(1);
+    timer_msleep(10);
   }
 }
 
