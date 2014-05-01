@@ -504,6 +504,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
   ASSERT ((read_bytes + zero_bytes) % PGSIZE == 0);
   ASSERT (pg_ofs (upage) == 0);
   ASSERT (ofs % PGSIZE == 0);
+  
   #ifdef VM
      while (read_bytes > 0 || zero_bytes > 0) {
       size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
@@ -513,7 +514,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       }
       read_bytes -= page_read_bytes;
       zero_bytes -= page_zero_bytes;
-      ofs += PGSIZE;
+      ofs += page_read_bytes;
       upage += PGSIZE;
      }
   #else

@@ -158,8 +158,10 @@ page_fault (struct intr_frame *f)
   if (fault_addr >= PHYS_BASE) {
     kill(f);
   }
+  uint32_t esp_page = (uint32_t)f->esp & ~PGMASK;
   //printf("esp: %p, fault_addr: %p\n", f->esp, fault_addr);
-  if (fault_addr - f->esp <= 4 && fault_addr - f->esp >= 0) {
+  if ((uint32_t)fault_addr >= (uint32_t)f->esp ||  esp_page + 4 >= f->esp) {
+    //printf("esp: %p, fault_addr: %p\n", f->esp, fault_addr);
     vm_install_page_stack((void*)((uint32_t)fault_addr & ~PGMASK));
   }
   /* To implement virtual memory, delete the rest of the function
@@ -175,7 +177,7 @@ page_fault (struct intr_frame *f)
     struct thread * cur = thread_current();
     struct vm_page *page = get_vm_page(fault_addr, thread_current());
     if (page == NULL) {
-      printf("here1: %p\n", fault_addr);
+      //printf("here1: %p, esp: %p\n", fault_addr, f->esp);
       kill(f);
       return;
     }
