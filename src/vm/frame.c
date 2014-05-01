@@ -85,6 +85,7 @@ static void * vm_evict_frame(void* nuaddr) {
 	if (thread != NULL) {
 		bool dirty = pagedir_is_dirty(thread->pagedir, uaddr);
 		//printf("check: %d\n", temp);
+		pagedir_clear_page(thread->pagedir, uaddr);
 		struct vm_page * page = get_vm_page(uaddr, thread);
 		if (page->type == VM_FILE && dirty) {
 			page->type = VM_SWAP;
@@ -98,8 +99,7 @@ static void * vm_evict_frame(void* nuaddr) {
 			//printf("stack\n");
 			page->type = VM_SWAP;
 			page->page_in_swap = swap_write(paddr);
-		}
-		pagedir_clear_page(thread->pagedir, uaddr);
+		}		
 	}	
 	evicted->uaddr = nuaddr;
 	evicted->thread = thread_current();
