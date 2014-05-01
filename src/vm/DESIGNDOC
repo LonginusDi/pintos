@@ -51,6 +51,7 @@ struct vm_page {
 	uint32_t zero_bytes; -- the bytes I need to zero
 	struct list_elem elem; -- a linked list elem in thread->supp_page_dir;
 	int page_in_swap; -- the block number in swap, if VM_SWAP
+	bool pinned; -- whether the page should be pinned
 };
 static struct lock lock; -- the internal lock for frame list
 ---- ALGORITHMS ----
@@ -92,15 +93,15 @@ static struct lock lock; -- the internal lock for free_swap
 
 >> B2: When a frame is required but none is free, some frame must be
 >> evicted.  Describe your code for choosing a frame to evict.
-I creat a kernel thread doing the clock algorithm, which is constantly clearing the access bit, with a 10ms interval. If there is no free frame, I go through the list to see which frame is not accessed, by looking at the access bit. Also, the frame chosen cannot be pinned, which means load = false. If all frames have been accessed, I will choose the first frame that is not pinned in the frame list. 
+I creat a kernel thread doing the LRU, by constantly clearing the access bit, which is constantly clearing the access bit, with a 10ms interval. If there is no free frame, I go through the list to see which frame is not accessed, by looking at the access bit. Also, the frame chosen cannot be pinned, which means load = false. If all frames have been accessed, I will choose the first frame that is not pinned in the frame list. 
 >> B3: When a process P obtains a frame that was previously used by a
 >> process Q, how do you adjust the page table (and any other data
 >> structures) to reflect the frame Q no longer has?
-I will first write the frame evicted into swap, if it is dirty or it is in the swap before. Then I clear the page dir for process Q with the mapping of the old user address. After the eviction finishes, I write the P's process control block into thread in struct frame, also applies the new user address. Then I add the mapping into the P's page dir. 
+I first I clear the page dir for process Q with the mapping of the old user address. Then I write the frame evicted into swap, if it is dirty or it is in the swap before. After the eviction finishes, I write the P's process control block into thread in struct frame, also applies the new user address. Then I add the mapping into the P's page dir. 
 >> B4: Explain your heuristic for deciding whether a page fault for an
 >> invalid virtual address should cause the stack to be extended into
 >> the page that faulted.
-There are two situations: if the fault address is above the esp, I will allocate the frame as the stack. Otherwise, I will compare the current esp, with the bottom of the stack, if they are within four bytes, I will do the stack extension. 
+There are two situations: if the fault address is above the esp, I will allocate the frame as the stack. Otherwise, I will compare the current esp, with the top of the stack (the lower address), if they are within four bytes, I will do the stack extension. 
 ---- SYNCHRONIZATION ----
 
 >> B5: Explain the basics of your VM synchronization design.  In
