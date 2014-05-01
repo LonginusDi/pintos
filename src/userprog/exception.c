@@ -210,7 +210,8 @@ page_fault (struct intr_frame *f)
     if (page->type == VM_STACK) {
 
     }
-    vm_frame_set_done(frame);
+    if (!page->pinned)
+      vm_frame_set_done(frame);
     pagedir_set_dirty(cur->pagedir, fault_addr, false);
     return;
   }

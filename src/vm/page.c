@@ -15,7 +15,7 @@ bool vm_install_page_fs(void *uaddr, struct file *f, off_t offset,
   page->read_bytes = read_bytes;
   page->zero_bytes = zero_bytes;
   page->writable = writable;
-
+  page->pinned = false;
   list_push_back(&cur->supp_page_dir, &page->elem);
   return true;
 }
@@ -30,7 +30,7 @@ bool vm_install_page_stack(void *uaddr) {
   page->uaddr = uaddr;
   page->type = VM_STACK;
   page->writable = true;
-
+  page->pinned = false;
   list_push_back(&cur->supp_page_dir, &page->elem);
   return true;
 }

@@ -1,12 +1,14 @@
 #include "vm/frame.h"
 #include "threads/thread.h"
+#include "threads/vaddr.h"
 #include "userprog/pagedir.h"
 #include "vm/swap.h"
 #include "vm/page.h"
 static struct lock lock;
 static void* vm_evict_frame(void *); 
 static struct frame* pick_evicted_frame();
-static struct frame* get_frame_by_addr(void *frame);
+static struct frame* get_frame_by_paddr(void *frame);
+static struct frame* get_frame_by_uaddr(void *frame);
 static int temp = 0;
 void vm_frame_init() {
 	list_init(&frame_list);
@@ -50,7 +52,11 @@ void vm_free_frame(struct thread * thr) {
 }
 
 void vm_frame_set_done(void * frame) {
-	struct frame * f = get_frame_by_addr(frame);
+	struct frame * f;
+	if (frame >= PHYS_BASE)
+		f = get_frame_by_paddr(frame);
+	else
+		f = get_frame_by_uaddr(frame);
 	f->done = true;
 }
 
@@ -149,13 +155,28 @@ static struct frame* pick_evicted_frame() {
 	return t;
 }
 
-static struct frame* get_frame_by_addr(void *frame) {
+static struct frame* get_frame_by_paddr(void *frame) {
 	lock_acquire(&lock);
 	struct list_elem * elem;
 	struct frame * t;
 	for (elem = list_begin(&frame_list); elem != list_end(&frame_list); elem = list_next(elem)) {
 		struct frame * f = list_entry(elem, struct frame, elem);
 		if (f->paddr == frame) {
+			t = f;
+			break;
+		}
+	}
+	lock_release(&lock);	
+	return t;
+}
+
+static struct frame* get_frame_by_uaddr(void *frame) {
+	lock_acquire(&lock);
+	struct list_elem * elem;
+	struct frame * t;
+	for (elem = list_begin(&frame_list); elem != list_end(&frame_list); elem = list_next(elem)) {
+		struct frame * f = list_entry(elem, struct frame, elem);
+		if (f->uaddr == frame && f->thread == thread_current()) {
 			t = f;
 			break;
 		}

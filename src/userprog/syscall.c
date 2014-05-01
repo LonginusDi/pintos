@@ -20,6 +20,7 @@
 #include <userprog/process.h>
 #ifdef VM
 #include "vm/page.h"
+#include "vm/frame.h"
 #endif
 
 static void syscall_handler (struct intr_frame *);
@@ -169,6 +170,9 @@ static bool is_valid_addr(const void *vaddr, bool write) {
   struct thread * cur = thread_current();
   void *uaddr = (void*)((uint32_t)vaddr & ~PGMASK);
   struct vm_page * page = get_vm_page(uaddr, thread_current());
+  if (page) {
+    page->pinned = true;
+  }
   if (write) {
     if (!page || !page->writable) {
       return false;
@@ -214,6 +218,18 @@ valid_buffer (struct thread *cur, char *vaddr, int lim, bool zeroed, bool write)
     }
   }
   return (zeroed) ? found_zero : true;
+}
+
+static void
+unpin_buffer (char *vaddr, int lim)
+{
+  uint32_t start = (uint32_t)(vaddr) & ~PGMASK;
+  uint32_t end = (uint32_t)(vaddr + lim) & ~PGMASK;
+  uint32_t i;
+  for (i = start; i <= end; i += PGSIZE) {
+    void * uaddr = (void *)(i);
+    vm_frame_set_done(uaddr);
+  }
 }
 
 /*
@@ -435,7 +451,7 @@ read_syscall (struct syscall_signature *sig, struct thread *cur)
   lock_acquire (&fs_lock);
   rv = file_read (f, buf, lim);
   lock_release (&fs_lock);
-
+  unpin_buffer(buf, lim);
   return rv;
 }
 

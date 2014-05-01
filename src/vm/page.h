@@ -18,6 +18,7 @@ struct vm_page {
 	uint32_t zero_bytes;
 	struct list_elem elem;
 	int page_in_swap;
+	bool pinned;
 };
 
 bool vm_install_page_fs(void *uaddr, struct file *f, off_t offset,
