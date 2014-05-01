@@ -8,9 +8,7 @@
 
 >> Fill in the names and email addresses of your group members.
 
-FirstName LastName <email@domain.example>
-FirstName LastName <email@domain.example>
-FirstName LastName <email@domain.example>
+Chengye Yin <chengyey@usc.edu>
 
 ---- PRELIMINARIES ----
 
@@ -20,6 +18,7 @@ FirstName LastName <email@domain.example>
 >> Please cite any offline or online sources you consulted while
 >> preparing your submission, other than the Pintos documentation, course
 >> text, lecture notes, and course staff.
+I have completed the stack growth. 
 
 			PAGE TABLE MANAGEMENT
 			=====================
@@ -29,26 +28,53 @@ FirstName LastName <email@domain.example>
 >> A1: Copy here the declaration of each new or changed `struct' or
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
-
+struct frame {
+	void *paddr; -- the kernel address from palloc_get_page()
+	struct list_elem elem; -- use for linked list
+	volatile struct thread * thread; -- the process control block for the owner of the frame
+	volatile void *uaddr; -- the corresponding user address
+	volatile bool done; -- whether this page has done loading, used for pin
+}
+struct list frame_list; -- a list of frame
+enum vm_page_type { -- the type of this page, names are self-explantory
+	VM_FILE, 
+	VM_SWAP,
+	VM_STACK
+};
+struct vm_page {
+	void *uaddr; -- the user address of the page
+	enum vm_page_type type; -- the type of the page
+	struct file * file; -- the file struct, if it is VM_FILE
+	off_t offset; -- the offset of the file
+	bool writable; -- whether this page is writable
+	uint32_t read_bytes; -- the bytes read from a file
+	uint32_t zero_bytes; -- the bytes I need to zero
+	struct list_elem elem; -- a linked list elem in thread->supp_page_dir;
+	int page_in_swap; -- the block number in swap, if VM_SWAP
+};
+static struct lock lock; -- the internal lock for frame list
 ---- ALGORITHMS ----
 
 >> A2: In a few paragraphs, describe your code for locating the frame,
 >> if any, that contains the data of a given page.
-
+I search througout the frame list, see whether the user address equals to the user address stored in struct frame. 
+In order to actually load the page into a frame. I first check the type, if it is VM_FILE, I load it from the file, with information offset, read_bytes, and zerobytes. If it is VM_SWAP, I read it from the swap, indicating the block number. 
+After I load the page into the physical frame, I set the page dir, adding a mapping with the physical address and the user address. Also, I set the thread field in struct frame to the current thread, and the user address. 
+Then I cleared the dirty bit, since it is a new frame now. 
 >> A3: How does your code coordinate accessed and dirty bits between
 >> kernel and user virtual addresses that alias a single frame, or
 >> alternatively how do you avoid the issue?
-
+I always use the user address to access the user memory, for example, in syscall. In terms of eviction, I choose to use the kernel address to do the copy to the swap. Since it is an eviction, I always reset the access bit and the dirty bit later. 
 ---- SYNCHRONIZATION ----
 
 >> A4: When two user processes both need a new frame at the same time,
 >> how are races avoided?
-
+I user an internal lock, to synchronize the frame list. 
 ---- RATIONALE ----
 
 >> A5: Why did you choose the data structure(s) that you did for
 >> representing virtual-to-physical mappings?
-
+This data structure stores everything I need for a physical frame, the physical address, the useraddress, and who owns it. Other information is not relevant to the frame table. Also, it gives the easiness to do the eviction, since I do not need to actually remove the frame from the list; instead, I only need to change the information like user address, and the owner of the frame. Therefore, I never free those frames, but only change the owner and the user address. 
 		       PAGING TO AND FROM DISK
 		       =======================
 
@@ -57,43 +83,48 @@ FirstName LastName <email@domain.example>
 >> B1: Copy here the declaration of each new or changed `struct' or
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
+static struct block * swap; -- the actuall block device
+static char * free_swap; -- the array of free swap position, similar to bitmap
+static int swap_mapping_size; -- the actual size of the free_swap
+static struct lock lock; -- the internal lock for free_swap
 
 ---- ALGORITHMS ----
 
 >> B2: When a frame is required but none is free, some frame must be
 >> evicted.  Describe your code for choosing a frame to evict.
-
+I creat a kernel thread doing the clock algorithm, which is constantly clearing the access bit, with a 10ms interval. If there is no free frame, I go through the list to see which frame is not accessed, by looking at the access bit. Also, the frame chosen cannot be pinned, which means load = false. If all frames have been accessed, I will choose the first frame that is not pinned in the frame list. 
 >> B3: When a process P obtains a frame that was previously used by a
 >> process Q, how do you adjust the page table (and any other data
 >> structures) to reflect the frame Q no longer has?
-
+I will first write the frame evicted into swap, if it is dirty or it is in the swap before. Then I clear the page dir for process Q with the mapping of the old user address. After the eviction finishes, I write the P's process control block into thread in struct frame, also applies the new user address. Then I add the mapping into the P's page dir. 
 >> B4: Explain your heuristic for deciding whether a page fault for an
 >> invalid virtual address should cause the stack to be extended into
 >> the page that faulted.
-
+There are two situations: if the fault address is above the esp, I will allocate the frame as the stack. Otherwise, I will compare the current esp, with the bottom of the stack, if they are within four bytes, I will do the stack extension. 
 ---- SYNCHRONIZATION ----
 
 >> B5: Explain the basics of your VM synchronization design.  In
 >> particular, explain how it prevents deadlock.  (Refer to the
 >> textbook for an explanation of the necessary conditions for
 >> deadlock.)
+I use three locks: the filesys lock, the swap lock, and the frame lock. In terms of the exception handling, I will acquire locks only if it is necessary. I also ensure that whenever the page fault happens, the current process never owns those three locks. In terms of the syscall handler, I need to prevent the page fault from happening, when it reaches the actuall filesys operations. I basically load the buffer into the memory before the filesys operation actually happens, with this frame pinned into the memory. 
 
 >> B6: A page fault in process P can cause another process Q's frame
 >> to be evicted.  How do you ensure that Q cannot access or modify
 >> the page during the eviction process?  How do you avoid a race
 >> between P evicting Q's frame and Q faulting the page back in?
-
+I will ensure this by first remove the page from Q's page dir, since Q is not running at this time. Then I will copy the frame into swap, if it is dirty or once existed in swap, using the kernel address. In this eviction process, I write a lock so that only one thread can complete the whole process, namely from evicting a frame to change the ownership (change the uaddr, and the pointer to the struct thread). Therefore, if Q needs to evict a frame while P is evicting, Q will be blocked. 
 >> B7: Suppose a page fault in process P causes a page to be read from
 >> the file system or swap.  How do you ensure that a second process Q
 >> cannot interfere by e.g. attempting to evict the frame while it is
 >> still being read in?
-
+I add a boolean, such that indicates whether the load is finished(also served as pin, load in struct frame). When I choose the frame list, if the load is not completed, I will not evict this frame. Therefore, the interference is not possible. 
 >> B8: Explain how you handle access to paged-out pages that occur
 >> during system calls.  Do you use page faults to bring in pages (as
 >> in user programs), or do you have a mechanism for "locking" frames
 >> into physical memory, or do you use some other design?  How do you
 >> gracefully handle attempted accesses to invalid virtual addresses?
-
+I use page faults to bring the page. I actually write a simple function that tries to read from the address, if it is in the supplemental page table, before the actual filesys operation happens. Then I pinned the page in the memory, so that it will be persistent throughout the syscall. 
 ---- RATIONALE ----
 
 >> B9: A single lock for the whole VM system would make
@@ -102,7 +133,8 @@ FirstName LastName <email@domain.example>
 >> possibility for deadlock but allows for high parallelism.  Explain
 >> where your design falls along this continuum and why you chose to
 >> design it this way.
-
+I choose to use three locks, said above, for higher parallelism, eliminating the possibility that a deadlock from happening. The tricky part is in the syscall, when an actuall page fault can occur during a filesys operation. I eliminate this possiblity. Also, I prevent the race condition defined above from happening. However, when I do clean up, I minimize the parallelism, since this part cannot be done wrong, to ensure that deadlock or race condition from happening. For example, in terms of the eviction proccess, I lock the entire function, so that only one thread can be allowed, which means different thread will have different eviction if they come at about the same time. 
+This design is definitely not with the highest parallelism, but it allows as much parallelism as possible, ensuring bad situations from happening in the kernel. 
 			 MEMORY MAPPED FILES
 			 ===================
 
