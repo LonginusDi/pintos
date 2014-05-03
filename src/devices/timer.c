@@ -105,6 +105,7 @@ timer_sleep (int64_t ticks)
   sema_up(&global_sem);
   ASSERT (intr_get_level () == INTR_ON);
   sema_down(&timer->sem);
+  free(timer);
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
