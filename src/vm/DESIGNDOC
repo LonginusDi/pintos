@@ -14,12 +14,12 @@ Chengye Yin <chengyey@usc.edu>
 
 >> If you have any preliminary comments on your submission, notes for the
 >> TAs, or extra credit, please give them here.
+I have completed the stack growth. 
 
 >> Please cite any offline or online sources you consulted while
 >> preparing your submission, other than the Pintos documentation, course
 >> text, lecture notes, and course staff.
-I have completed the stack growth. 
-
+I refer to: https://github.com/ilyanep/pintos-awesome (for the basic structure)
 			PAGE TABLE MANAGEMENT
 			=====================
 
