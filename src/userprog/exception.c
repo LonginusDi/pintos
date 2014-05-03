@@ -160,7 +160,7 @@ page_fault (struct intr_frame *f)
   }
   uint32_t esp_page = (uint32_t)f->esp & ~PGMASK;
   //printf("esp: %p, fault_addr: %p\n", f->esp, fault_addr);
-  if ((uint32_t)fault_addr >= (uint32_t)f->esp ||  esp_page + 4 >= f->esp) {
+  if ((uint32_t)fault_addr >= (uint32_t)f->esp - 4||  esp_page + 4 >= f->esp) {
     //printf("esp: %p, fault_addr: %p\n", f->esp, fault_addr);
     vm_install_page_stack((void*)((uint32_t)fault_addr & ~PGMASK));
   }
