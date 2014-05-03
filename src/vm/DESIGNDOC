@@ -58,7 +58,8 @@ static struct lock lock; -- the internal lock for frame list
 
 >> A2: In a few paragraphs, describe your code for locating the frame,
 >> if any, that contains the data of a given page.
-I search througout the frame list, see whether the user address equals to the user address stored in struct frame. 
+I search througout the frame list, see whether the user address equals to the user address stored in struct frame.
+In order to get the supplemental page table entry, I search through the current thread's supplemental page table, using the user address in the frame. This entry contains all the information of the specific page. (e.g. where to load the page) 
 In order to actually load the page into a frame. I first check the type, if it is VM_FILE, I load it from the file, with information offset, read_bytes, and zerobytes. If it is VM_SWAP, I read it from the swap, indicating the block number. 
 After I load the page into the physical frame, I set the page dir, adding a mapping with the physical address and the user address. Also, I set the thread field in struct frame to the current thread, and the user address. 
 Then I cleared the dirty bit, since it is a new frame now. 
@@ -93,7 +94,7 @@ static struct lock lock; -- the internal lock for free_swap
 
 >> B2: When a frame is required but none is free, some frame must be
 >> evicted.  Describe your code for choosing a frame to evict.
-I creat a kernel thread doing the LRU, by constantly clearing the access bit, which is constantly clearing the access bit, with a 10ms interval. If there is no free frame, I go through the list to see which frame is not accessed, by looking at the access bit. Also, the frame chosen cannot be pinned, which means load = false. If all frames have been accessed, I will choose the first frame that is not pinned in the frame list. 
+I creat a kernel thread doing the LRU, by constantly clearing the access bit, with a 10ms interval. If there is no free frame, I go through the list to see which frame is not accessed, by looking at the access bit. Also, the frame chosen cannot be pinned, which means load = false. If all frames have been accessed, I will choose the first frame that is not pinned in the frame list. 
 >> B3: When a process P obtains a frame that was previously used by a
 >> process Q, how do you adjust the page table (and any other data
 >> structures) to reflect the frame Q no longer has?
